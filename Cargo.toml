@@ -10,3 +10,4 @@ anyhow = "1.0.75"
 colored = "2.0.4"
 csv = "1.2.2"
 rand = "0.8.5"
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }

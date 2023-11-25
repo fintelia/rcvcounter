@@ -1,10 +1,11 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    io::{Cursor, Read},
     iter, mem,
     sync::{Arc, Mutex},
 };
 
-use anyhow::Error;
+use anyhow::{Context, Error};
 use colored::ColoredString;
 use rand::seq::SliceRandom;
 
@@ -31,150 +32,6 @@ fn print_count(piles: &BTreeMap<String, Vec<usize>>, outcome: ColoredString, out
     println!();
 }
 
-// fn transfer_votes<'a, 'b>(
-//     ballot: &'b mut Vec<&'a str>,
-//     index: usize,
-//     piles: &'b mut BTreeMap<String, Vec<usize>>,
-//     exhausted: &'b mut Vec<usize>,
-// ) -> bool {
-//     while !ballot.is_empty() && !piles.contains_key(ballot[0]) {
-//         ballot.remove(0);
-//     }
-//     if !ballot.is_empty() {
-//         piles
-//             .entry(ballot[0].to_string())
-//             .or_insert_with(Vec::new)
-//             .push(index);
-//         true
-//     } else {
-//         exhausted.push(index);
-//         false
-//     }
-// }
-
-// fn simulate(mut ballots: Vec<Vec<&str>>) -> Vec<String> {
-//     let quota = (ballots.len() + 9) / 10;
-//     // println!("{:?} ballots. Quota is {}", ballots.len(), quota);
-//     // println!("{} empty ballots", empty_ballots);
-
-//     let mut piles = BTreeMap::new();
-//     for (i, ballot) in ballots.iter().enumerate() {
-//         piles
-//             .entry(ballot[0].to_string())
-//             .or_insert_with(Vec::new)
-//             .push(i);
-//     }
-
-//     // print_count(&piles, "".into(), true);
-
-//     let mut exhausted = Vec::new();
-
-//     // Eliminate candidates with fewer than 50 first place votes
-//     let mut eliminated = Vec::new();
-//     for (candidate, pile) in &piles {
-//         if pile.len() < 50 {
-//             eliminated.push((candidate.to_string(), pile.len()));
-//         }
-//     }
-//     let eliminated_piles = eliminated
-//         .iter()
-//         .map(|(candidate, _)| piles.remove(&*candidate).unwrap())
-//         .collect::<Vec<_>>();
-//     for pile in &eliminated_piles {
-//         for &ballot in pile {
-//             transfer_votes(&mut ballots[ballot], ballot, &mut piles, &mut exhausted);
-//         }
-//     }
-
-//     // println!();
-//     // print_count(&piles, "Eliminated candidates with fewer than 50 first place votes".underline(), true);
-
-//     let mut rng = rand::thread_rng();
-
-//     let mut elected = Vec::new();
-
-//     // Transfer votes from candidates that made quota
-//     while elected.len() < 9 {
-//         let max_votes = piles.iter().map(|p| p.1.len()).max().unwrap();
-//         if max_votes >= quota || piles.len() + elected.len() == 9 {
-//             let mut first_place: Vec<_> = piles
-//                 .iter()
-//                 .filter(|p| p.1.len() == max_votes)
-//                 .map(|p| p.0.to_string())
-//                 .collect();
-//             first_place.shuffle(&mut rng);
-
-//             let elected_candidate = first_place.pop().unwrap();
-//             elected.push(elected_candidate.clone());
-
-//             let mut pile = piles.remove(&*elected_candidate).unwrap();
-//             pile.shuffle(&mut rng);
-
-//             let mut left_to_transfer = pile.len() - quota;
-//             while !pile.is_empty() && left_to_transfer > 0 {
-//                 let ballot = pile.pop().unwrap();
-//                 if transfer_votes(&mut ballots[ballot], ballot, &mut piles, &mut exhausted) {
-//                     left_to_transfer -= 1;
-//                 }
-//             }
-
-//             // print_count(&piles, format!("{max_votes}: {elected_candidate}").bold(), true);
-
-//             // let mut just_elected = Vec::new();
-//             // for (candidate, pile) in &piles {
-//             //     if pile.len() >= quota {
-//             //         just_elected.push(candidate.to_owned());
-//             //     }
-//             // }
-//             // let elected_piles = just_elected
-//             //     .iter()
-//             //     .map(|candidate| piles.remove(candidate).unwrap())
-//             //     .collect::<Vec<_>>();
-//             // elected.extend(just_elected);
-//             // println!("Elected: {:?}", elected);
-
-//             // for mut pile in elected_piles {
-//             //     pile.shuffle(&mut rng);
-//             //     for ballot in pile {
-//             //         transfer_votes(&mut ballots[ballot], ballot, &mut piles, &mut exhausted)
-//             //     }
-//             // }
-//         } else {
-//             // Eliminate last place candidate
-//             let min_votes = piles.iter().map(|p| p.1.len()).min().unwrap();
-//             let mut last_place: Vec<_> = piles
-//                 .iter()
-//                 .filter(|p| p.1.len() == min_votes)
-//                 .map(|p| p.0.to_string())
-//                 .collect();
-//             last_place.shuffle(&mut rng);
-
-//             let eliminated_candidate = last_place.pop().unwrap();
-//             let pile = piles.remove(&*eliminated_candidate).unwrap();
-//             let votes = pile.len();
-//             for ballot in pile {
-//                 transfer_votes(&mut ballots[ballot], ballot, &mut piles, &mut exhausted);
-//             }
-//             // print_count(&piles, format!("{votes}: {eliminated_candidate}").strikethrough(), false);
-//             eliminated.push((eliminated_candidate.to_owned(), votes));
-//         }
-//     }
-
-//     // for (candidate, _) in elected {
-//     //     println!("{}", format!("{:4}: {}", quota, candidate).bold());
-//     // }
-//     // for (candidate, votes) in eliminated.iter().rev() {
-//     //     println!("{}", format!("{:4}: {}", votes, candidate).color(colored::Color::Red));
-//     // }
-
-//     // match eliminated.iter().find(|(candidate, _)| candidate == "Sobrinho-Wheeler") {
-//     //     Some((_, votes)) => *votes,
-//     //     None => panic!("Jivan Wins!"),
-//     // }
-//     elected.sort();
-//     elected
-// }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Status {
     Elected,
@@ -183,7 +40,7 @@ enum Status {
 }
 
 type Ballot = [u8; 16];
-fn run(ballots: &[Ballot], names: &[&str]) -> Vec<u8> {
+fn run(seats: usize, ballots: &[Ballot], names: &[&str], ballot_ids: &[String]) -> Vec<u8> {
     let mut piles: [Vec<_>; 256] = (0..256)
         .map(|_| Vec::new())
         .collect::<Vec<_>>()
@@ -201,7 +58,8 @@ fn run(ballots: &[Ballot], names: &[&str]) -> Vec<u8> {
     let mut round_totals: Vec<Vec<usize>> = Vec::new();
     round_totals.push(piles.iter().map(Vec::len).collect());
 
-    let quota = (ballots.len() + 9) / 10;
+    let quota = (ballots.len() + seats) / (seats + 1);
+    // println!("Quota: {}", quota);
 
     // Round 1 winners
     for i in 1..256 {
@@ -211,32 +69,64 @@ fn run(ballots: &[Ballot], names: &[&str]) -> Vec<u8> {
         }
     }
 
+    // println!("Quota: {}", quota);
+
     // Remove over
-    for i in 1..256 {
-        if piles[i].len() > quota {
-            status[i] = Status::Elected;
+    let mut order = (1..256)
+        .filter(|&i| piles[i].len() > quota)
+        .collect::<Vec<_>>();
+    order.sort_by_key(|&i| piles[i].len());
+    for i in order.into_iter().rev() {
+        let step = (piles[i].len() as f64 / (piles[i].len() - quota) as f64).round() as usize;
+        // println!(
+        //     "{} over quota by {} votes",
+        //     names[i],
+        //     piles[i].len() - quota
+        // );
+        // println!("Step: {}", step);
 
-            let step = (piles[i].len() as f64 / quota as f64).round() as usize;
+        let mut num_removed = 0;
+        let mut removed = vec![false; piles[i].len()];
 
-            let mut j = step - 1;
-            while piles[i].len() > quota {
-                for &recipient in &ballots[piles[i][j] as usize][1..] {
-                    if status[recipient as usize] == Status::Continuing {
-                        let ballot_index = piles[i].remove(j);
-                        piles[recipient as usize].push(ballot_index);
-                        if piles[recipient as usize].len() >= quota {
-                            status[recipient as usize] = Status::Elected;
-                        }
-                        break;
+        let mut start_index = step - 1;
+        let mut j = start_index;
+        while piles[i].len() - num_removed > quota {
+            for &recipient in &ballots[piles[i][j] as usize][1..] {
+                if status[recipient as usize] == Status::Continuing {
+                    let ballot_index = piles[i][j];
+                    piles[recipient as usize].push(ballot_index);
+                    if piles[recipient as usize].len() >= quota {
+                        status[recipient as usize] = Status::Elected;
                     }
-                }
-
-                j += step;
-                if j >= piles[i].len() {
-                    j -= piles[i].len() - 1;
+                    removed[j] = true;
+                    num_removed += 1;
+                    // println!(
+                    //     "   {}:  {} --> {}",
+                    //     ballot_ids[ballot_index as usize], names[i], names[recipient as usize]
+                    // );
+                    break;
                 }
             }
+            j += step;
+            if j >= piles[i].len() {
+                start_index += 1;
+                j = start_index;
+                //j -= piles[i].len() / step * step - 1;
+            }
         }
+        piles[i] = piles[i]
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| !removed[*j])
+            .map(|(_, &x)| x)
+            .collect();
+
+        // for i in 1..18 {
+        //     if status[i] != Status::Eliminated {
+        //         println!("{:4} votes: {}", piles[i].len(), names[i]);
+        //     }
+        // }
+        // println!();
     }
 
     // Remove zero votes
@@ -248,7 +138,7 @@ fn run(ballots: &[Ballot], names: &[&str]) -> Vec<u8> {
 
     loop {
         let candidates_remaining = status.iter().filter(|&&s| s != Status::Eliminated).count();
-        if candidates_remaining <= 9 {
+        if candidates_remaining <= seats {
             break;
         }
 
@@ -280,51 +170,55 @@ fn run(ballots: &[Ballot], names: &[&str]) -> Vec<u8> {
 
         // Transfer votes
         status[last_candidate] = Status::Eliminated;
+        // println!(
+        //     "{:4} votes: {} eliminated",
+        //     min_votes, names[last_candidate]
+        // );
 
-        if candidates_remaining == 11 {
-            let mut success_lengths = [0; 16];
-            let mut fail_lengths = [0; 16];
+        // if candidates_remaining == 11 {
+        //     let mut success_lengths = [0; 16];
+        //     let mut fail_lengths = [0; 16];
 
-            for ballot in &piles[0] {
-                let length = ballots[*ballot as usize]
-                    .iter()
-                    .filter(|&&x| x != 0)
-                    .count();
-                fail_lengths[length] += 1;
-                if length >= 7 {
-                    println!(
-                        "{}: {}",
-                        length,
-                        ballots[*ballot as usize]
-                            .iter()
-                            .map(|x| names[*x as usize])
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                }
-            }
+        //     for ballot in &piles[0] {
+        //         let length = ballots[*ballot as usize]
+        //             .iter()
+        //             .filter(|&&x| x != 0)
+        //             .count();
+        //         fail_lengths[length] += 1;
+        //         if length >= 7 {
+        //             println!(
+        //                 "{}: {}",
+        //                 length,
+        //                 ballots[*ballot as usize]
+        //                     .iter()
+        //                     .map(|x| names[*x as usize])
+        //                     .collect::<Vec<_>>()
+        //                     .join(", ")
+        //             );
+        //         }
+        //     }
 
-            for pile in &piles[1..] {
-                for ballot in pile {
-                    let length = ballots[*ballot as usize]
-                        .iter()
-                        .filter(|&&x| x != 0)
-                        .count();
-                    success_lengths[length] += 1;
-                }
-            }
-            for i in 1..16 {
-                println!(
-                    "{}: {:.1}% ({}/{})",
-                    i,
-                    100.0 * success_lengths[i] as f32
-                        / (success_lengths[i] + fail_lengths[i]) as f32,
-                    fail_lengths[i],
-                    (success_lengths[i] + fail_lengths[i])
-                );
-            }
-            println!("total failed = {}", fail_lengths.iter().sum::<usize>());
-        }
+        //     for pile in &piles[1..] {
+        //         for ballot in pile {
+        //             let length = ballots[*ballot as usize]
+        //                 .iter()
+        //                 .filter(|&&x| x != 0)
+        //                 .count();
+        //             success_lengths[length] += 1;
+        //         }
+        //     }
+        //     for i in 1..16 {
+        //         println!(
+        //             "{}: {:.1}% ({}/{})",
+        //             i,
+        //             100.0 * success_lengths[i] as f32
+        //                 / (success_lengths[i] + fail_lengths[i]) as f32,
+        //             fail_lengths[i],
+        //             (success_lengths[i] + fail_lengths[i])
+        //         );
+        //     }
+        //     println!("total failed = {}", fail_lengths.iter().sum::<usize>());
+        // }
 
         for ballot_index in mem::take(&mut piles[last_candidate]) {
             let ballot = &ballots[ballot_index as usize];
@@ -350,117 +244,279 @@ fn run(ballots: &[Ballot], names: &[&str]) -> Vec<u8> {
     elected
 }
 
-fn main() -> Result<(), Error> {
-    let data = include_str!("../council.csv");
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Race {
+    School,
+    Council,
+}
+impl Race {
+    fn to_str(&self) -> &'static str {
+        match *self {
+            Race::School => "School",
+            Race::Council => "Council",
+        }
+    }
+}
 
-    colored::control::set_override(true);
+#[derive(Default)]
+struct BallotData {
+    ballots: Vec<Vec<[u8; 16]>>,
+    ballot_ids: Vec<Vec<String>>,
+    precints: Vec<String>,
+    candidates: Vec<String>,
+    seats: usize,
+}
 
-    let mut _empty_ballots = 0;
-    let mut ballots = Vec::new();
-    for line in data.lines().skip(1) {
-        let columns = line.split(',').collect::<Vec<_>>();
-        let mut ballot = columns[3..].to_vec();
-        ballot.retain(|&x| !x.is_empty() /*&& x != "Sobrinho-Wheeler" */);
-        // if ballot[0] == "Pierre" {
-        //     ballot = vec!["Carlone"];
-        //     n+=1;
-        // }
-        // if ballot.len() >= 15 {
-        //     println!("{}: {:?}", ballot.len(), ballot);
-        // }
-        if !ballot.is_empty() {
-            ballots.push(ballot);
-        } else {
-            _empty_ballots += 1;
+fn parse_ballots(zipfile: &[u8], race: Race) -> Result<BallotData, Error> {
+    let mut archive = zip::ZipArchive::new(Cursor::new(zipfile))?;
+
+    let mut chp = None;
+    let mut prms = HashMap::new();
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i)?;
+        if !entry.is_file() || !entry.name().contains(race.to_str()) {
+            continue;
+        }
+
+        let name = entry.name().split('/').last().unwrap().to_string();
+        if name.ends_with(".PRM") {
+            let mut data = String::new();
+            entry.take(1 << 20).read_to_string(&mut data)?;
+            prms.insert(name, data);
+        } else if name.ends_with(".chp") {
+            let mut data = String::new();
+            entry.take(1 << 20).read_to_string(&mut data)?;
+            chp = Some(data);
         }
     }
 
-    // for _ in 0..250 {
-    //     ballots.push(vec!["Sobrinho-Wheeler"]);
-    // }
-    // for _ in 0..250 {
-    //     ballots.push(vec!["Carlone"]);
-    // }
-    // for _ in 0..250 {
-    //     ballots.push(vec!["Williams"]);
-    // }
+    let mut ballot_data = BallotData::default();
 
-    let reverse_candidate_mapping = iter::once("Exhausted")
-        .chain(
-            ballots
-                .iter()
-                .flatten()
-                .map(|&x| x)
-                .collect::<HashSet<_>>()
-                .into_iter(),
-        )
-        .collect::<Vec<_>>();
-    let candidate_mapping = reverse_candidate_mapping
-        .iter()
+    let mut seperators = b",)".to_vec();
+    let mut candidate_ids = Vec::new();
+    let mut includes = Vec::new();
+
+    let chp = chp.context("missing .chp file")?;
+    for line in chp.lines() {
+        let Some((command, record)) = line.split_once(char::is_whitespace) else {
+            continue;
+        };
+
+        match command {
+            ".ELECT" => {
+                ballot_data.seats = record.parse()?;
+            }
+            ".BALLOT-FORMAT-SEPS" => {
+                seperators = record.as_bytes().to_vec();
+            }
+            ".CANDIDATE" => {
+                let record = record
+                    .split_once(", ")
+                    .context("Failed to parse candidate def")?;
+                candidate_ids.push(record.0.to_string());
+                ballot_data
+                    .candidates
+                    .push(record.1.trim_matches('"').to_string());
+            }
+            ".INCLUDE" => {
+                includes.push(record.to_string());
+            }
+            _ => {}
+        }
+    }
+
+    let candidate_id_to_index = candidate_ids
+        .into_iter()
         .enumerate()
-        .map(|(i, &x)| (x, i))
+        .map(|(i, x)| (x, 1 + i as u8))
         .collect::<HashMap<_, _>>();
 
-    let ballots: Vec<[u8; 16]> = ballots
+    for include in includes {
+        let prm = prms
+            .remove(include.trim())
+            .context(format!("missing .PRM file for {include}"))?;
+
+        ballot_data.precints.push(
+            include
+                .strip_suffix(".PRM")
+                .unwrap_or("unknown")
+                .to_string(),
+        );
+
+        let mut ballot_ids = Vec::new();
+        let mut ballots = Vec::new();
+        for line in prm.lines() {
+            if line.is_empty() {
+                continue;
+            }
+            let (ballot_id, rankings) = line
+                .split_once(char::from(seperators[1]))
+                .context("Failed to parse ballot")?;
+
+            let ballot_id = ballot_id
+                .split_once(char::from(seperators[0]))
+                .context("Failed to parse ballot id")?
+                .0
+                .to_string();
+
+            let mut ballot = Vec::new();
+            for candidate in rankings.trim().split(char::from(seperators[0])) {
+                if candidate.is_empty() || candidate.contains("=") {
+                    continue;
+                }
+                let candidate = candidate
+                    .split_once('[')
+                    .context("Failed to parse candidate")?
+                    .0;
+                ballot.push(
+                    *candidate_id_to_index
+                        .get(candidate)
+                        .with_context(|| format!("Unknown candidate '{candidate}'"))?,
+                );
+            }
+            if !ballot.is_empty() {
+                ballot.resize(16, 0);
+                ballots.push(ballot.try_into().unwrap());
+                ballot_ids.push(ballot_id);
+            }
+        }
+        ballot_data.ballot_ids.push(ballot_ids);
+        ballot_data.ballots.push(ballots);
+    }
+
+    Ok(ballot_data)
+}
+
+fn main() -> Result<(), Error> {
+    //let data = include_str!("../council.csv");
+
+    colored::control::set_override(true);
+
+    // let mut _empty_ballots = 0;
+    // let mut ballots = Vec::new();
+    // for line in data.lines().skip(1) {
+    //     let columns = line.split(',').collect::<Vec<_>>();
+    //     let mut ballot = columns[3..].to_vec();
+    //     ballot.retain(|&x| !x.is_empty() /*&& x != "Sobrinho-Wheeler" */);
+    //     // if ballot[0] == "Pierre" {
+    //     //     ballot = vec!["Carlone"];
+    //     //     n+=1;
+    //     // }
+    //     // if ballot.len() >= 15 {
+    //     //     println!("{}: {:?}", ballot.len(), ballot);
+    //     // }
+    //     if !ballot.is_empty() {
+    //         ballots.push(ballot);
+    //     } else {
+    //         _empty_ballots += 1;
+    //     }
+    // }
+
+    let ballot_data = parse_ballots(include_bytes!("../ballots2023.zip"), Race::School)?;
+
+    // let reverse_candidate_mapping = iter::once("Exhausted")
+    //     .chain(
+    //         ballots
+    //             .iter()
+    //             .flatten()
+    //             .map(|&x| x)
+    //             .collect::<HashSet<_>>()
+    //             .into_iter(),
+    //     )
+    //     .collect::<Vec<_>>();
+    // let candidate_mapping = reverse_candidate_mapping
+    //     .iter()
+    //     .enumerate()
+    //     .map(|(i, &x)| (x, i))
+    //     .collect::<HashMap<_, _>>();
+
+    // let ballots: Vec<[u8; 16]> = ballots
+    //     .iter()
+    //     .map(|ballot| {
+    //         let mut ballot = ballot
+    //             .iter()
+    //             .map(|&x| candidate_mapping[&x] as u8)
+    //             .collect::<Vec<_>>();
+    //         ballot.resize(16, 0);
+    //         ballot.try_into().unwrap()
+    //     })
+    //     .collect();
+
+    let reverse_candidate_mapping = iter::once("Exhausted")
+        .chain(ballot_data.candidates.iter().map(|x| x.as_str()))
+        .collect::<Vec<_>>();
+    let ballots = ballot_data
+        .ballots
         .iter()
-        .map(|ballot| {
-            let mut ballot = ballot
-                .iter()
-                .map(|&x| candidate_mapping[&x] as u8)
-                .collect::<Vec<_>>();
-            ballot.resize(16, 0);
-            ballot.try_into().unwrap()
-        })
-        .collect();
+        .cloned()
+        .flatten()
+        .collect::<Vec<_>>();
+
+    let ballot_ids = ballot_data
+        .ballot_ids
+        .iter()
+        .cloned()
+        .flatten()
+        .collect::<Vec<_>>();
 
     const THREADS: usize = 20;
     const ITERS: usize = 5000;
 
-    let normal = run(&ballots, &reverse_candidate_mapping);
+    let normal = run(
+        ballot_data.seats,
+        &ballots,
+        &reverse_candidate_mapping,
+        &ballot_ids,
+    );
 
-    // let councils = Arc::new(Mutex::new(HashMap::new()));
-    // let mut joins = Vec::new();
-    // for _ in 0..THREADS {
-    //     let normal = normal.clone();
-    //     let mut ballots = ballots.clone();
-    //     let councils = councils.clone();
-    //     joins.push(std::thread::spawn(move || {
-    //         for _ in 0..ITERS {
-    //             ballots.shuffle(&mut rand::thread_rng());
-    //             let result = run(&ballots);
-    //             if result != normal {
-    //                 *councils.lock().unwrap().entry(result).or_insert(0) += 1;
-    //             }
-    //         }
-    //     }));
-    // }
-    // for j in joins {
-    //     j.join().unwrap();
-    // }
+    let councils = Arc::new(Mutex::new(HashMap::new()));
+    let mut joins = Vec::new();
+    for _ in 0..THREADS {
+        let normal = normal.clone();
+        let mut ballots = ballot_data.ballots.clone();
+        let councils = councils.clone();
+        joins.push(std::thread::spawn(move || {
+            for _ in 0..ITERS {
+                for b in &mut ballots {
+                    b.shuffle(&mut rand::thread_rng());
 
-    // println!();
-    // let mut sum = 0;
-    // for (council, n) in councils.lock().unwrap().iter() {
-    //     println!(
-    //         "{:.4}%: {}",
-    //         100.0 * (*n as f32) / (ITERS * THREADS) as f32,
-    //         council
-    //             .iter()
-    //             .map(|&x| reverse_candidate_mapping[x as usize])
-    //             .collect::<Vec<_>>()
-    //             .join(", ")
-    //     );
-    //     sum += n;
-    // }
-    // println!(
-    //     "{:.4}%: {}",
-    //     100.0 * ((ITERS * THREADS - sum) as f32) / (ITERS * THREADS) as f32,
-    //     normal
-    //         .iter()
-    //         .map(|&x| reverse_candidate_mapping[x as usize])
-    //         .collect::<Vec<_>>()
-    //         .join(", ")
-    // );
+                }
+                let mut ballots = ballots.iter().cloned().flatten().collect::<Vec<_>>();
+                let result = run(ballot_data.seats, &ballots, &[], &[]);
+                if result != normal {
+                    *councils.lock().unwrap().entry(result).or_insert(0) += 1;
+                }
+            }
+        }));
+    }
+    for j in joins {
+        j.join().unwrap();
+    }
+
+    println!();
+    let mut sum = 0;
+    for (council, n) in councils.lock().unwrap().iter() {
+        println!(
+            "{:.4}%: {}",
+            100.0 * (*n as f32) / (ITERS * THREADS) as f32,
+            council
+                .iter()
+                .map(|&x| reverse_candidate_mapping[x as usize])
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        sum += n;
+    }
+    println!(
+        "{:.4}%: {}",
+        100.0 * ((ITERS * THREADS - sum) as f32) / (ITERS * THREADS) as f32,
+        normal
+            .iter()
+            .map(|&x| reverse_candidate_mapping[x as usize])
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
 
     Ok(())
 }
