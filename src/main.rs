@@ -183,7 +183,7 @@ enum Status {
 }
 
 type Ballot = [u8; 16];
-fn run(ballots: &[Ballot]) -> Vec<u8> {
+fn run(ballots: &[Ballot], names: &[&str]) -> Vec<u8> {
     let mut piles: [Vec<_>; 256] = (0..256)
         .map(|_| Vec::new())
         .collect::<Vec<_>>()
@@ -281,6 +281,51 @@ fn run(ballots: &[Ballot]) -> Vec<u8> {
         // Transfer votes
         status[last_candidate] = Status::Eliminated;
 
+        if candidates_remaining == 11 {
+            let mut success_lengths = [0; 16];
+            let mut fail_lengths = [0; 16];
+
+            for ballot in &piles[0] {
+                let length = ballots[*ballot as usize]
+                    .iter()
+                    .filter(|&&x| x != 0)
+                    .count();
+                fail_lengths[length] += 1;
+                if length >= 7 {
+                    println!(
+                        "{}: {}",
+                        length,
+                        ballots[*ballot as usize]
+                            .iter()
+                            .map(|x| names[*x as usize])
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+            }
+
+            for pile in &piles[1..] {
+                for ballot in pile {
+                    let length = ballots[*ballot as usize]
+                        .iter()
+                        .filter(|&&x| x != 0)
+                        .count();
+                    success_lengths[length] += 1;
+                }
+            }
+            for i in 1..16 {
+                println!(
+                    "{}: {:.1}% ({}/{})",
+                    i,
+                    100.0 * success_lengths[i] as f32
+                        / (success_lengths[i] + fail_lengths[i]) as f32,
+                    fail_lengths[i],
+                    (success_lengths[i] + fail_lengths[i])
+                );
+            }
+            println!("total failed = {}", fail_lengths.iter().sum::<usize>());
+        }
+
         for ballot_index in mem::take(&mut piles[last_candidate]) {
             let ballot = &ballots[ballot_index as usize];
             let mut i = 0;
@@ -371,51 +416,51 @@ fn main() -> Result<(), Error> {
     const THREADS: usize = 20;
     const ITERS: usize = 5000;
 
-    let normal = run(&ballots);
+    let normal = run(&ballots, &reverse_candidate_mapping);
 
-    let councils = Arc::new(Mutex::new(HashMap::new()));
-    let mut joins = Vec::new();
-    for _ in 0..THREADS {
-        let normal = normal.clone();
-        let mut ballots = ballots.clone();
-        let councils = councils.clone();
-        joins.push(std::thread::spawn(move || {
-            for _ in 0..ITERS {
-                ballots.shuffle(&mut rand::thread_rng());
-                let result = run(&ballots);
-                if result != normal {
-                    *councils.lock().unwrap().entry(result).or_insert(0) += 1;
-                }
-            }
-        }));
-    }
-    for j in joins {
-        j.join().unwrap();
-    }
+    // let councils = Arc::new(Mutex::new(HashMap::new()));
+    // let mut joins = Vec::new();
+    // for _ in 0..THREADS {
+    //     let normal = normal.clone();
+    //     let mut ballots = ballots.clone();
+    //     let councils = councils.clone();
+    //     joins.push(std::thread::spawn(move || {
+    //         for _ in 0..ITERS {
+    //             ballots.shuffle(&mut rand::thread_rng());
+    //             let result = run(&ballots);
+    //             if result != normal {
+    //                 *councils.lock().unwrap().entry(result).or_insert(0) += 1;
+    //             }
+    //         }
+    //     }));
+    // }
+    // for j in joins {
+    //     j.join().unwrap();
+    // }
 
-    println!();
-    let mut sum = 0;
-    for (council, n) in councils.lock().unwrap().iter() {
-        println!(
-            "{:.4}%: {}",
-            100.0 * (*n as f32) / (ITERS * THREADS) as f32,
-            council
-                .iter()
-                .map(|&x| reverse_candidate_mapping[x as usize])
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        sum += n;
-    }
-    println!(
-        "{:.4}%: {}",
-        100.0 * ((ITERS * THREADS - sum) as f32) / (ITERS * THREADS) as f32,
-        normal
-            .iter()
-            .map(|&x| reverse_candidate_mapping[x as usize])
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
+    // println!();
+    // let mut sum = 0;
+    // for (council, n) in councils.lock().unwrap().iter() {
+    //     println!(
+    //         "{:.4}%: {}",
+    //         100.0 * (*n as f32) / (ITERS * THREADS) as f32,
+    //         council
+    //             .iter()
+    //             .map(|&x| reverse_candidate_mapping[x as usize])
+    //             .collect::<Vec<_>>()
+    //             .join(", ")
+    //     );
+    //     sum += n;
+    // }
+    // println!(
+    //     "{:.4}%: {}",
+    //     100.0 * ((ITERS * THREADS - sum) as f32) / (ITERS * THREADS) as f32,
+    //     normal
+    //         .iter()
+    //         .map(|&x| reverse_candidate_mapping[x as usize])
+    //         .collect::<Vec<_>>()
+    //         .join(", ")
+    // );
 
     Ok(())
 }
