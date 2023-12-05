@@ -9,71 +9,116 @@ use anyhow::{Context, Error};
 use rand::seq::SliceRandom;
 use wasm_bindgen::prelude::*;
 
+const BALLOTS_2021: &[u8] = include_bytes!("../ballots2021.zip");
+const BALLOTS_2023: &[u8] = include_bytes!("../ballots2023.zip");
+
+fn election_to_ballot_data(election: &str) -> Result<BallotData, String> {
+    match election {
+        "sc23" => parse_ballots(BALLOTS_2023, Race::School),
+        "cc23" => parse_ballots(BALLOTS_2023, Race::Council),
+        "sc21" => parse_ballots(BALLOTS_2021, Race::School),
+        "cc21" => parse_ballots(BALLOTS_2021, Race::Council),
+        _ => return Err("ERROR: Unknown election".to_owned()),
+    }
+    .map_err(|e| e.to_string())
+}
+
+#[wasm_bindgen]
+pub fn candidates(election: &str) -> Vec<String> {
+    election_to_ballot_data(election)
+        .map(|ballot_data| ballot_data.candidates)
+        .unwrap_or_default()
+}
+
+#[wasm_bindgen]
+pub fn precints(election: &str) -> Vec<String> {
+    election_to_ballot_data(election)
+        .map(|ballot_data| ballot_data.precints)
+        .unwrap_or_default()
+}
+
 #[wasm_bindgen]
 pub fn simulate(
     election: &str,
     shuffle_within_precints: bool,
     shuffle_precint_order: bool,
+    extra_votes: usize,
+    extra_candidate: String,
+    extra_precint: String,
 ) -> String {
-    // let ballots2021 = include_bytes!("../ballots2021.zip");
-    let ballots2023 = include_bytes!("../ballots2023.zip");
-
-    let ballot_data = match election {
-        "2023 School Committee" => parse_ballots(ballots2023, Race::School),
-        "2023 City Council" => parse_ballots(ballots2023, Race::Council),
-        // "2021 School Committee" => parse_ballots(ballots2021, Race::School),
-        // "2021 City Council" => parse_ballots(ballots2021, Race::Council),
-        _ => return "ERROR: Unknown election".to_owned(),
-    };
-
-    let Ok(ballot_data) = ballot_data else {
-        return "ERROR: Failed to parse ballots".to_owned();
+    let mut ballot_data = match election_to_ballot_data(election) {
+        Ok(ballot_data) => ballot_data,
+        Err(e) => return e,
     };
 
     let reverse_candidate_mapping = iter::once("Exhausted")
         .chain(ballot_data.candidates.iter().map(|x| x.as_str()))
         .collect::<Vec<_>>();
-    let ballots = ballot_data
-        .ballots
-        .iter()
-        .cloned()
-        .flatten()
-        .collect::<Vec<_>>();
 
-    let ballot_ids = ballot_data
-        .ballot_ids
-        .iter()
-        .cloned()
-        .flatten()
-        .collect::<Vec<_>>();
+    // let ballot_ids = ballot_data
+    //     .ballot_ids
+    //     .iter()
+    //     .cloned()
+    //     .flatten()
+    //     .collect::<Vec<_>>();
 
-    const ITERS: usize = 5000;
+    if extra_votes > 0 {
+        let Some(candidate_index) = reverse_candidate_mapping
+            .iter()
+            .position(|&x| x == extra_candidate)
+        else {
+            return format!("ERROR: Unknown candidate '{extra_candidate}'");
+        };
+
+        let Some(precint_index) = ballot_data
+            .precints
+            .iter()
+            .position(|x| x == &*extra_precint)
+        else {
+            return format!("ERROR: Unknown precint '{extra_precint}'");
+        };
+
+        let mut ballot_contents = [0; 16];
+        ballot_contents[0] = candidate_index as u8;
+
+        for _ in 0..extra_votes {
+            ballot_data.ballots[precint_index].push(ballot_contents);
+        }
+    }
 
     let normal = run(
         ballot_data.seats,
-        &ballots,
-        &reverse_candidate_mapping,
-        &ballot_ids,
+        &ballot_data
+            .ballots
+            .iter()
+            .cloned()
+            .flatten()
+            .collect::<Vec<_>>(),
+        &[], // &reverse_candidate_mapping,
+        &[], // &ballot_ids,
     );
 
+    const ITERS: usize = 5000;
     let mut other_outcomes = HashMap::new();
-    for _ in 0..ITERS {
-        let mut ballots = ballot_data.ballots.clone();
+    if shuffle_within_precints || shuffle_precint_order || extra_votes > 0 {
+        for _ in 0..ITERS {
+            let mut ballots = ballot_data.ballots.clone();
 
-        if shuffle_precint_order {
-            ballots.shuffle(&mut rand::thread_rng());
-        }
-
-        if shuffle_within_precints {
-            for b in &mut ballots {
-                b.shuffle(&mut rand::thread_rng());
+            if shuffle_precint_order {
+                ballots.shuffle(&mut rand::thread_rng());
             }
-        }
 
-        let ballots = ballots.iter().cloned().flatten().collect::<Vec<_>>();
-        let result = run(ballot_data.seats, &ballots, &[], &[]);
-        if result != normal {
-            *other_outcomes.entry(result).or_insert(0) += 1;
+            if shuffle_within_precints {
+                for b in &mut ballots {
+                    b.shuffle(&mut rand::thread_rng());
+                }
+            }
+
+            let ballots = ballots.iter().cloned().flatten().collect::<Vec<_>>();
+            let result = run(ballot_data.seats, &ballots, &[], &[]);
+            if result != normal {
+                *other_outcomes.entry(result).or_insert(0) += 1;
+            }
         }
     }
 
@@ -84,7 +129,7 @@ pub fn simulate(
     ));
     output.push_str(&format!(
         "<p class=\"mb-1\"><strong>Ballots:</strong> {}\n</p>",
-        ballots.len()
+        ballot_data.ballots.iter().flatten().count()
     ));
 
     if other_outcomes.is_empty() {
@@ -96,6 +141,9 @@ pub fn simulate(
                 .collect::<Vec<_>>()
                 .join(", "),
         );
+        if shuffle_within_precints || shuffle_precint_order || extra_votes > 0 {
+            output.push_str("<p>No other outcomes found in 5000 runs.</p>");
+        }
         return output;
     }
 
@@ -343,10 +391,11 @@ pub fn run(seats: usize, ballots: &[Ballot], _names: &[&str], _ballot_ids: &[Str
 
     let mut elected = Vec::new();
     for (candidate, &s) in status.iter().enumerate() {
-        if s == Status::Elected {
+        if s != Status::Eliminated {
             elected.push(candidate as u8);
         }
     }
+
     elected.sort();
     elected
 }
@@ -368,11 +417,11 @@ impl Race {
 
 #[derive(Default)]
 pub struct BallotData {
-    ballots: Vec<Vec<Ballot>>,
-    ballot_ids: Vec<Vec<String>>,
-    precints: Vec<String>,
-    candidates: Vec<String>,
-    seats: usize,
+    pub ballots: Vec<Vec<Ballot>>,
+    pub ballot_ids: Vec<Vec<String>>,
+    pub precints: Vec<String>,
+    pub candidates: Vec<String>,
+    pub seats: usize,
 }
 
 pub fn parse_ballots(zipfile: &[u8], race: Race) -> Result<BallotData, Error> {
@@ -386,15 +435,22 @@ pub fn parse_ballots(zipfile: &[u8], race: Race) -> Result<BallotData, Error> {
             continue;
         }
 
-        let name = entry.name().split('/').last().unwrap().to_string();
-        if name.ends_with(".PRM") {
+        let name = entry.name().split('/').last().unwrap().to_lowercase();
+        if name.ends_with(".prm") {
             let mut data = String::new();
             entry.take(1 << 20).read_to_string(&mut data)?;
             prms.insert(name, data);
         } else if name.ends_with(".chp") {
-            let mut data = String::new();
-            entry.take(1 << 20).read_to_string(&mut data)?;
-            chp = Some(data);
+            let mut data = Vec::new();
+            entry.take(1 << 20).read_to_end(&mut data)?;
+
+            // Parse the data as utf-8, or Latin-1 if that fails.
+            chp = Some(String::from_utf8(data).unwrap_or_else(|e| {
+                e.into_bytes()
+                    .into_iter()
+                    .map(|x| x as char)
+                    .collect::<String>()
+            }));
         }
     }
 
@@ -412,7 +468,7 @@ pub fn parse_ballots(zipfile: &[u8], race: Race) -> Result<BallotData, Error> {
 
         match command {
             ".ELECT" => {
-                ballot_data.seats = record.parse()?;
+                ballot_data.seats = record.trim().parse()?;
             }
             ".BALLOT-FORMAT-SEPS" => {
                 seperators = record.as_bytes().to_vec();
@@ -422,12 +478,15 @@ pub fn parse_ballots(zipfile: &[u8], race: Race) -> Result<BallotData, Error> {
                     .split_once(", ")
                     .context("Failed to parse candidate def")?;
                 candidate_ids.push(record.0.to_string());
-                ballot_data
-                    .candidates
-                    .push(record.1.trim_matches('"').to_string());
+
+                let mut candidate_name = record.1.trim().trim_matches('"').to_string();
+                if let Some((last, first)) = candidate_name.split_once(", ") {
+                    candidate_name = format!("{first} {last}");
+                }
+                ballot_data.candidates.push(candidate_name);
             }
             ".INCLUDE" => {
-                includes.push(record.to_string());
+                includes.push(record.trim().to_lowercase());
             }
             _ => {}
         }
@@ -446,8 +505,8 @@ pub fn parse_ballots(zipfile: &[u8], race: Race) -> Result<BallotData, Error> {
 
         ballot_data.precints.push(
             include
-                .strip_suffix(".PRM")
-                .unwrap_or("unknown")
+                .strip_suffix(".prm")
+                .unwrap_or(include.as_str())
                 .to_string(),
         );
 

@@ -16,30 +16,55 @@
 
 <body>
   <script type="module">
-    import init, { simulate } from "./pkg/rcvcounter.js";
+    import init, { simulate, candidates, precints } from "./pkg/rcvcounter.js";
 
-    init();
+    window.changedElection = function changedElection() {
+      var election = document.getElementById("chosenElection").value;
 
-    function simulateElection() {
-      var election = document.getElementById("chosenElection").innerText;
+      var result = candidates(election);
+      var select = document.getElementById("extraCandidate");
+      select.innerHTML = "";
+      for (var i = 0; i < result.length; i++) {
+        var opt = result[i];
+        var el = document.createElement("option");
+        el.textContent = opt;
+        el.value = opt;
+        select.appendChild(el);
+      }
+
+      var result = precints(election);
+      var select = document.getElementById("extraPrecint");
+      select.innerHTML = "";
+      for (var i = 0; i < result.length; i++) {
+        var opt = result[i];
+        var el = document.createElement("option");
+        el.textContent = Math.floor(parseInt(opt) / 100).toString() + "-" + (parseInt(opt) % 100).toString();
+        el.value = opt;
+        select.appendChild(el);
+      }
+
+      document.getElementById("resultsBox").innerHTML = simulate(election, false, false, 0, "", "");
+    };
+
+    async function simulateElection() {
+      var election = document.getElementById("chosenElection").value;
       var shuffleWithinPrecint = document.getElementById("shuffleWithinPrecint").checked;
       var shufflePrecintOrder = document.getElementById("shufflePrecintOrder").checked;
-      document.getElementById("resultsBox").innerHTML = simulate(election, shuffleWithinPrecint, shufflePrecintOrder);
+      var extraVotes = document.getElementById("extraVotes").value;
+      var extraCandidate = document.getElementById("extraCandidate").value;
+      var extraPrecint = document.getElementById("extraPrecint").value;
+      document.getElementById("resultsBox").innerHTML = simulate(election, shuffleWithinPrecint, shufflePrecintOrder, extraVotes, extraCandidate, extraPrecint);
+      $("#spinner").hide();
     }
 
-    $(function () {
-      $(".dropdown-menu li a").click(function () {
-        $(".btn:first-child").text($(this).text());
-        $(".btn:first-child").val($(this).text());
-      });
-    });
+    init().then(() => {
+      window.changedElection();
 
-    $('#simulate').on('click', function(event) {
-      event.preventDefault();
-      $("#spinner").attr('hidden', false);
-      simulateElection();
-      $("#spinner").attr('hidden', true);
-      // $("#spinner").addClass('d-none');
+      $('#simulate').on('click', function (event) {
+        event.preventDefault();
+        $("#spinner").show();
+        setTimeout(simulateElection, 0);
+      });
     });
 
   </script>
@@ -59,46 +84,62 @@
       </header>
 
       <div class="p-3 mb-4 bg-light rounded-3">
-        <div class="container-fluid py-5">
-          <!-- <h1 class="display-5 fw-bold">Simulate PR Election</h1> -->
-          <p>Cambridge MA uses Single Transferable Vote to run its elections.</p>
+        <div class="container-fluid py-3">
+          <p>Simulate 5,000 runs of a recent Cambridge election...</p>
 
-          <div class="dropdown">
-            <button class="btn btn-default dropdown-toggle" type="button" id="chosenElection" data-bs-toggle="dropdown">2023
-              School Committee</button>
-            <ul class="dropdown-menu">
-              <li><a class="dropdown-item" tabindex="-1" href="#">2023 School Committee</a></li>
-              <!-- <li><hr class="dropdown-divider"></hr></li>  -->
-              <li><a class="dropdown-item" tabindex="-1" href="#">2023 City Council</a></li>
-              <!-- <li><a class="dropdown-item" tabindex="-1" href="#">2021 School Committee</a></li>
-              <li><a class="dropdown-item" tabindex="-1" href="#">2021 City Council</a></li> -->
-            </ul>
-          </div>
+          <select class="mb-2 btn btn-outline-primary dropdown-toggle" id="chosenElection" onchange="changedElection()">
+            <option value="sc23" selected>2023 School Committee</option>
+            <option value="cc23">2023 City Council</option>
+            <option value="sc21">2021 School Committee</option>
+            <option value="cc21">2021 City Council</option>
+          </select>
 
           <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="shuffleWithinPrecint">
+            <input class="form-check-input" type="checkbox" id="shuffleWithinPrecint" checked>
             <label class="form-check-label" for="shuffleWithinPrecint">Randomize Within Precints</label>
           </div>
-          <div class="form-check form-switch">
+          <div class="mb-2 form-check form-switch">
             <input class="form-check-input" type="checkbox" id="shufflePrecintOrder">
             <label class="form-check-label" for="shufflePrecintOrder">Randomize Precint Order</label>
           </div>
 
+          <div>
+            Add
+            <input class="btn btn-outline-primary p-1" type="number" id="extraVotes" min="0" value="0">
+            bullet votes for
+            <select class="btn btn-outline-primary dropdown-toggle" id="extraCandidate">
+            </select>
+            in precint
+            <select class="btn btn-outline-primary dropdown-toggle" id="extraPrecint">
+              <option value="first" selected>First</option>
+              <option value="last">Last</option>
+            </select>
+            .
+          </div>
 
         </div>
-        <a id="simulate" class="btn btn-primary btn-lg" href="" role="button">Simulate</a>
-
+        <a id="simulate" class="btn btn-primary btn-lg" href="" role="button">
+          <span id="spinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"
+            style="display: none"></span>
+          Simulate
+        </a>
 
       </div>
 
       <div class="p-3 mb-4 bg-light rounded-3">
         <div class="container-fluid py-2">
           <h2>Results</h2>
-          <div id=spinner class="spinner-border" role="status" style="visibility: hidden">
-            <span class="visually-hidden">Running...</span>
-          </div>
           <div id="resultsBox"></div>
         </div>
+      </div>
+
+
+      <div class="text-muted" >
+        DISCLAIMER: This is a simulation of hypothetical outcomes. It is not an
+        official count. I have attempted to make it as accurate as possible, but
+        there may be bugs. Please do not use this for anything important. The
+        official software used by the City of Cambridge is <a
+        href="https://www.votingsolutions.com/products.htm">ChoicePlus Pro</a>.
       </div>
 
     </div>
