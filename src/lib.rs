@@ -255,10 +255,6 @@ pub fn run(seats: usize, ballots: &[Ballot], _names: &[&str], _ballot_ids: &[Str
                     }
                     removed[j] = true;
                     num_removed += 1;
-                    // println!(
-                    //     "   {}:  {} --> {}",
-                    //     ballot_ids[ballot_index as usize], names[i], names[recipient as usize]
-                    // );
                     break;
                 }
             }
@@ -266,7 +262,6 @@ pub fn run(seats: usize, ballots: &[Ballot], _names: &[&str], _ballot_ids: &[Str
             if j >= piles[i].len() {
                 start_index += 1;
                 j = start_index;
-                //j -= piles[i].len() / step * step - 1;
             }
         }
         piles[i] = piles[i]
@@ -275,13 +270,6 @@ pub fn run(seats: usize, ballots: &[Ballot], _names: &[&str], _ballot_ids: &[Str
             .filter(|(j, _)| !removed[*j])
             .map(|(_, &x)| x)
             .collect();
-
-        // for i in 1..18 {
-        //     if status[i] != Status::Eliminated {
-        //         println!("{:4} votes: {}", piles[i].len(), names[i]);
-        //     }
-        // }
-        // println!();
     }
 
     // Remove zero votes
@@ -325,56 +313,6 @@ pub fn run(seats: usize, ballots: &[Ballot], _names: &[&str], _ballot_ids: &[Str
 
         // Transfer votes
         status[last_candidate] = Status::Eliminated;
-        // println!(
-        //     "{:4} votes: {} eliminated",
-        //     min_votes, names[last_candidate]
-        // );
-
-        // if candidates_remaining == 11 {
-        //     let mut success_lengths = [0; 16];
-        //     let mut fail_lengths = [0; 16];
-
-        //     for ballot in &piles[0] {
-        //         let length = ballots[*ballot as usize]
-        //             .iter()
-        //             .filter(|&&x| x != 0)
-        //             .count();
-        //         fail_lengths[length] += 1;
-        //         if length >= 7 {
-        //             println!(
-        //                 "{}: {}",
-        //                 length,
-        //                 ballots[*ballot as usize]
-        //                     .iter()
-        //                     .map(|x| names[*x as usize])
-        //                     .collect::<Vec<_>>()
-        //                     .join(", ")
-        //             );
-        //         }
-        //     }
-
-        //     for pile in &piles[1..] {
-        //         for ballot in pile {
-        //             let length = ballots[*ballot as usize]
-        //                 .iter()
-        //                 .filter(|&&x| x != 0)
-        //                 .count();
-        //             success_lengths[length] += 1;
-        //         }
-        //     }
-        //     for i in 1..16 {
-        //         println!(
-        //             "{}: {:.1}% ({}/{})",
-        //             i,
-        //             100.0 * success_lengths[i] as f32
-        //                 / (success_lengths[i] + fail_lengths[i]) as f32,
-        //             fail_lengths[i],
-        //             (success_lengths[i] + fail_lengths[i])
-        //         );
-        //     }
-        //     println!("total failed = {}", fail_lengths.iter().sum::<usize>());
-        // }
-
         for ballot_index in mem::take(&mut piles[last_candidate]) {
             let ballot = &ballots[ballot_index as usize];
             let mut i = 0;
