@@ -25,6 +25,9 @@
       var select = document.getElementById("extraCandidate");
       select.innerHTML = "";
       for (var i = 0; i < result.length; i++) {
+        if (result[i].startsWith("Write-in")) {
+          continue;
+        }
         var opt = result[i];
         var el = document.createElement("option");
         el.textContent = opt;
@@ -59,7 +62,6 @@
 
     init().then(() => {
       window.changedElection();
-
       $('#simulate').on('click', function (event) {
         event.preventDefault();
         $("#spinner").show();
@@ -71,7 +73,7 @@
 
   <main>
     <div class="container py-4">
-      <header class="pb-3 mb-4 border-bottom">
+      <!-- <header class="pb-3 mb-4 border-bottom">
         <a href="" class="d-flex align-items-center text-dark text-decoration-none">
           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="32" class="me-2" viewBox="0 0 118 94" role="img">
             <title>Bootstrap</title>
@@ -81,11 +83,35 @@
           </svg>
           <span class="fs-4">RCV Counter</span>
         </a>
+      </header> -->
+
+      <header class="pb-3 mb-4 border-bottom">
+        <h1 class="text-center">RCV Counter</h1>
       </header>
 
       <div class="p-3 mb-4 bg-light rounded-3">
-        <div class="container-fluid py-3">
-          <p>Simulate 5,000 runs of a recent Cambridge election...</p>
+        <div class="container-fluid py-2">
+          <p>
+            RCV Counter simulates hypothetical variations of a recent Cambridge
+            election. The ranked choice system Cambridge uses relies on the
+            ordering of ballots to reassign them when transferring between
+            candidates, which means that changing the order of ballots can
+            sometimes produce different outcomes.
+          </p>
+
+          <p>
+            This tool performs 5,000 simulations of the election with the
+            ballots randomly shuffled before each run. Some candidates will win
+            in for all ballot shuffles simulated are declared "Undefeated".
+            Others will only win sometimes and are shown alongside the percent
+            of the times they win.
+          </p>
+        </div>
+      </div>
+
+      <div class="p-3 mb-4 bg-light rounded-3">
+        <div class="container-fluid py-2 mb-2">
+          <h2 class="mb-3">Parameters</h2>
 
           <select class="mb-2 btn btn-outline-primary dropdown-toggle" id="chosenElection" onchange="changedElection()">
             <option value="sc23" selected>2023 School Committee</option>
@@ -118,10 +144,10 @@
           </div>
 
         </div>
-        <a id="simulate" class="btn btn-primary btn-lg" href="" role="button">
+        <a id="simulate" class="btn btn-primary btn-lg" role="button">
           <span id="spinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"
             style="display: none"></span>
-          Simulate
+          <span id="simulateLabel">Simulate</span>
         </a>
 
       </div>
@@ -133,15 +159,14 @@
         </div>
       </div>
 
-
-      <div class="text-muted" >
+      <div class="mb-4 text-muted text-left">
         DISCLAIMER: This is a simulation of hypothetical outcomes. It is not an
         official count. I have attempted to make it as accurate as possible, but
-        there may be bugs. Please do not use this for anything important. The
-        official software used by the City of Cambridge is <a
-        href="https://www.votingsolutions.com/products.htm">ChoicePlus Pro</a>.
+        there may be bugs. The official software used by the City of Cambridge
+        is <a href="https://www.votingsolutions.com/products.htm">ChoicePlus
+          Pro</a>
+        while the source code for this tool is <a href="https://github.com/fintelia/rcvcounter">available on GitHub</a>.
       </div>
-
     </div>
   </main>
 </body>
