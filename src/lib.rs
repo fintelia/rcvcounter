@@ -100,7 +100,7 @@ pub fn simulate(
 
     const ITERS: usize = 5000;
     let mut other_outcomes = HashMap::new();
-    if shuffle_within_precints || shuffle_precint_order || extra_votes > 0 {
+    if shuffle_within_precints || shuffle_precint_order {
         for _ in 0..ITERS {
             let mut ballots = ballot_data.ballots.clone();
 
@@ -141,8 +141,10 @@ pub fn simulate(
                 .collect::<Vec<_>>()
                 .join(", "),
         );
-        if shuffle_within_precints || shuffle_precint_order || extra_votes > 0 {
+        if shuffle_within_precints || shuffle_precint_order {
             output.push_str("<p>No other outcomes found in 5000 runs.</p>");
+        } else if extra_votes > 0 {
+            output.push_str("<p>Randomization disabled so no other outcomes possible.</p>");
         }
         return output;
     }
